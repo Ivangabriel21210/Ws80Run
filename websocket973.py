@@ -7,7 +7,7 @@ LISTENING_ADDR = '0.0.0.0'
 try:
    LISTENING_PORT = int(sys.argv[1])
 except:
-   LISTENING_PORT = 80
+   LISTENING_PORT = 8080
 BUFLEN = 4096 * 4
 TIMEOUT = 60
 MSG = 'BLADEXVPS'
@@ -171,7 +171,7 @@ class ConnectionHandler(threading.Thread):
             if self.method=='CONNECT':
                 port = 443
             else:
-                port = 80
+                port = 8080
 
         (soc_family, soc_type, proto, _, address) = socket.getaddrinfo(host, port)[0]
 
