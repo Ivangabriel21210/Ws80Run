@@ -13,7 +13,7 @@ TIMEOUT = 60
 MSG = 'BLADEXVPS'
 COR = '<tt><font color="green">'
 FTAG = '</tt></font>'
-DEFAULT_HOST = "127.0.0.1:22"
+DEFAULT_HOST = "147.93.1.118:22"
 RESPONSE = "HTTP/1.1 101 " + str(COR) + str(MSG) + str(FTAG) + "\r\n\r\n"
  
 class Server(threading.Thread):
