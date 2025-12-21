@@ -119,13 +119,14 @@
       const dom = {};
       const resources = {
         async loadScriptWithRetry(urls, timeout=2500, retries=1){
+          let lastErr=null;
           for(const url of urls){
             for(let i=0;i<=retries;i++){
-              try{ await this._inject(url, timeout); logSafe('Loaded', url); return url; }
-              catch(e){ logSafe('Load fail', url, e); if(i===retries) break; }
+              try{ if(window.THREE) return url; await this._inject(url, timeout); logSafe('Loaded', url); return url; }
+              catch(e){ lastErr=e; logSafe('Load fail', url, e); }
             }
           }
-          throw new Error('scripts failed');
+          throw lastErr||new Error('scripts failed');
         },
         _inject(url, timeout){
           return new Promise((resolve,reject)=>{
@@ -138,7 +139,7 @@
         }
       };
       const $ = id=>document.getElementById(id);
-      ['loading','menu','options-panel','lobby','hud','meeting','task-ui','final','pause','fps','canvas3d','canvas2d','minimap-canvas','toast','action-btn','task-panel','meeting-info','vote-grid','skip-vote','final-title','final-summary','final-menu','play-btn','options-btn','credits-btn','credits','options-back','quality','volume','bot-count','impostor-count','tasks-per','kill-cd','player-role','start-btn','lobby-back','status','task-list','sabotage-status','cooldowns','fps','resume','leave','canvas3d','canvas2d'].forEach(id=>dom[id.replace(/-/g,'_')]=$(id));
+      ['loading','menu','options-panel','lobby','hud','meeting','task-ui','final','pause','fps','canvas3d','canvas2d','minimap-canvas','toast','action-btn','task-panel','meeting-info','vote-grid','skip-vote','final-title','final-summary','final-menu','play-btn','options-btn','credits-btn','credits','options-back','quality','volume','bot-count','impostor-count','tasks-per','kill-cd','player-role','start-btn','lobby-back','status','task-list','sabotage-status','cooldowns','fps','resume','leave','canvas3d','canvas2d','bot-count-label','tasks-per-label','kill-cd-label'].forEach(id=>dom[id.replace(/-/g,'_')]=$(id));
 
       function show(el, yes=true){ el.classList[yes?'remove':'add']('hidden'); }
       function toast(msg){ const t=dom.toast; t.textContent=msg; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,1800); }
@@ -159,9 +160,9 @@
         dom.credits_btn.onclick=()=>{ dom.credits.classList.toggle('hidden'); };
         dom.quality.onchange=e=>state.quality=e.target.value;
         dom.volume.oninput=e=>state.volume=parseFloat(e.target.value);
-        dom.bot_count.oninput=e=>{ dom.bot_count_label.textContent=`${e.target.value} bots`; };
-        dom.tasks_per.oninput=e=>{ dom.tasks_per_label.textContent=`${e.target.value} tareas`; };
-        dom.kill_cd.oninput=e=>{ dom.kill_cd_label.textContent=`${e.target.value}s`; };
+        dom.bot_count.oninput=e=>{ if(dom.bot_count_label) dom.bot_count_label.textContent=`${e.target.value} bots`; };
+        dom.tasks_per.oninput=e=>{ if(dom.tasks_per_label) dom.tasks_per_label.textContent=`${e.target.value} tareas`; };
+        dom.kill_cd.oninput=e=>{ if(dom.kill_cd_label) dom.kill_cd_label.textContent=`${e.target.value}s`; };
         dom.lobby_back.onclick=()=>{ show(dom.lobby,false); show(dom.menu,true); };
         dom.start_btn.onclick=startGame;
         dom.skip_vote.onclick=()=>submitVote('skip');
@@ -225,7 +226,7 @@
           const isPlayer=i===0;
           let role=randomRole(order[i], impostors);
           if(isPlayer && desiredRole!=='auto') role=desiredRole;
-          const p={id:uid(),name:isPlayer?'Tú':`Bot-${i}`,role,alive:true,taskProgress:[], x:0,z:0, rot:0, target:null, cooldown:0, sabotageCd:0, vote:null, suspicion:Math.random()*0.4, vision:role==='imp'?8:7};
+          const p={id:uid(),name:isPlayer?'Tú':`Bot-${i}`,role,alive:true,taskProgress:[], x:0,z:0, rot:0, target:null, cooldown:0, sabotageCd:0, vote:null, suspicion:Math.random()*0.4, vision:role==='imp'?8:7, viewDir:{dx:0,dz:-1}};
           p.taskProgress = generateTasks(parseInt(dom.tasks_per.value,10));
           p.x = (Math.random()-0.5)*6; p.z=(Math.random()-0.5)*6;
           game.players.push(p);
@@ -250,7 +251,9 @@
         createPlayers();
         rebuildPlayerMeshes();
         game.phase='play'; game.sabotage=null; game.timer=0;
+        game.meeting=null;
         show(dom.lobby,false); show(dom.menu,false); show(dom.hud,true);
+        show(dom.meeting,false);
         dom.status.textContent='En partida';
         state.mode='play';
         state.paused=false;
@@ -293,6 +296,7 @@
           const angle=Math.atan2(p.target.z-p.z,p.target.x-p.x); dx=Math.cos(angle); dz=Math.sin(angle);
         }
         const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
+        if(isPlayer && (Math.abs(dx)>0.01 || Math.abs(dz)>0.01)) p.viewDir={dx,dz};
         const nx=p.x+dx*speed*dt; const nz=p.z+dz*speed*dt;
         if(!collides(nx,nz)) { p.x=nx; p.z=nz; }
       }
@@ -580,6 +584,9 @@
           const now=performance.now(); const dt=Math.min(0.05,(now-last)/1000); last=now;
           update(dt);
           for(let i=0;i<game.players.length;i++){ const p=game.players[i]; const m=meshes[i]; if(m) m.position.set(p.x,0.75,p.z); }
+          // first-person camera: follow player head
+          const player=game.players[0]; const dir=player.viewDir||{dx:0,dz:-1};
+          if(camera){ camera.position.set(player.x,1.7,player.z); camera.lookAt(player.x+dir.dx,1.6,player.z+dir.dz); }
           if(renderer3D && scene && camera) renderer3D.render(scene,camera);
           requestAnimationFrame(loop);
         }
