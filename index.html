@@ -179,8 +179,6 @@
             'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
           ],2500,1);
           if(window.THREE){
-            const canvas = dom.canvas3d; const gl=canvas.getContext('webgl');
-            if(!gl){ state.fallback2d=true; throw new Error('webgl missing'); }
             state.useThree=true; setup3D(); return;
           }
         }catch(err){ logSafe('3D failed, fallback to 2D', err); }
@@ -250,13 +248,14 @@
       function startGame(){
         createMap();
         createPlayers();
+        rebuildPlayerMeshes();
         game.phase='play'; game.sabotage=null; game.timer=0;
         show(dom.lobby,false); show(dom.menu,false); show(dom.hud,true);
         dom.status.textContent='En partida';
         state.mode='play';
         state.paused=false;
         updateTaskUI(); updateActionButton('Nada cercano');
-        if(state.useThree) startLoop3D(); else startLoop2D();
+        if(state.useThree && renderer3D) startLoop3D(); else startLoop2D();
         toast('Partida iniciada');
       }
 
@@ -545,26 +544,34 @@
       // ---- Rendering ----
       let renderer3D=null, scene=null, camera=null, meshes=[];
       function setup3D(){
-        state.useThree=true; dom.canvas3d.style.display='block'; dom.canvas2d.style.display='none';
-        const canvas=dom.canvas3d; renderer3D=new THREE.WebGLRenderer({canvas, antialias: state.quality==='high'});
-        renderer3D.setSize(window.innerWidth, window.innerHeight);
-        scene=new THREE.Scene(); scene.background=new THREE.Color('#0a0f1a');
-        camera=new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight,0.1,200);
-        camera.position.set(0,18,22); camera.lookAt(0,0,0);
-        const light=new THREE.DirectionalLight(0xffffff, 0.8); light.position.set(10,20,10); scene.add(light); scene.add(new THREE.AmbientLight(0x446688));
-        createMap();
-        const roomMat=new THREE.MeshPhongMaterial({color:0x1b2b45});
-        for(const r of game.mapRooms){ const g=new THREE.BoxGeometry(r.w,0.5,r.h); const m=new THREE.Mesh(g,roomMat); m.position.set(r.x,0,r.z); scene.add(m); }
-        for(const c of game.corridors){ const g=new THREE.BoxGeometry(c.w,0.2,c.h); const m=new THREE.Mesh(g, new THREE.MeshPhongMaterial({color:0x16233a})); m.position.set(c.x,0,c.z); scene.add(m); }
-        const wallMat=new THREE.MeshPhongMaterial({color:0x0f1726});
-        for(const r of game.mapRooms){
-          const w=new THREE.BoxGeometry(r.w+1,4,0.5); const d=new THREE.Mesh(w,wallMat); d.position.set(r.x,1.5,r.z-r.h/2); scene.add(d);
-          const d2=d.clone(); d2.position.set(r.x,1.5,r.z+r.h/2); scene.add(d2);
-          const g2=new THREE.BoxGeometry(0.5,4,r.h+1); const l=new THREE.Mesh(g2,wallMat); l.position.set(r.x-r.w/2,1.5,r.z); scene.add(l);
-          const l2=l.clone(); l2.position.set(r.x+r.w/2,1.5,r.z); scene.add(l2);
-        }
-        meshes=game.players.map((p,i)=>{ const mat=new THREE.MeshStandardMaterial({color:p.role==='imp'?0xff9f1c:0x46e8b3}); const g=new THREE.CapsuleGeometry(0.5,1.2,4,8); const m=new THREE.Mesh(g,mat); scene.add(m); return m; });
-        window.addEventListener('resize',()=>{ renderer3D.setSize(window.innerWidth,window.innerHeight); camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); });
+        try{
+          state.useThree=true; dom.canvas3d.style.display='block'; dom.canvas2d.style.display='none';
+          const canvas=dom.canvas3d; renderer3D=new THREE.WebGLRenderer({canvas, antialias: state.quality==='high'});
+          renderer3D.setSize(window.innerWidth, window.innerHeight);
+          scene=new THREE.Scene(); scene.background=new THREE.Color('#0a0f1a');
+          camera=new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight,0.1,200);
+          camera.position.set(0,18,22); camera.lookAt(0,0,0);
+          const light=new THREE.DirectionalLight(0xffffff, 0.8); light.position.set(10,20,10); scene.add(light); scene.add(new THREE.AmbientLight(0x446688));
+          createMap();
+          const roomMat=new THREE.MeshPhongMaterial({color:0x1b2b45});
+          for(const r of game.mapRooms){ const g=new THREE.BoxGeometry(r.w,0.5,r.h); const m=new THREE.Mesh(g,roomMat); m.position.set(r.x,0,r.z); scene.add(m); }
+          for(const c of game.corridors){ const g=new THREE.BoxGeometry(c.w,0.2,c.h); const m=new THREE.Mesh(g, new THREE.MeshPhongMaterial({color:0x16233a})); m.position.set(c.x,0,c.z); scene.add(m); }
+          const wallMat=new THREE.MeshPhongMaterial({color:0x0f1726});
+          for(const r of game.mapRooms){
+            const w=new THREE.BoxGeometry(r.w+1,4,0.5); const d=new THREE.Mesh(w,wallMat); d.position.set(r.x,1.5,r.z-r.h/2); scene.add(d);
+            const d2=d.clone(); d2.position.set(r.x,1.5,r.z+r.h/2); scene.add(d2);
+            const g2=new THREE.BoxGeometry(0.5,4,r.h+1); const l=new THREE.Mesh(g2,wallMat); l.position.set(r.x-r.w/2,1.5,r.z); scene.add(l);
+            const l2=l.clone(); l2.position.set(r.x+r.w/2,1.5,r.z); scene.add(l2);
+          }
+          rebuildPlayerMeshes();
+          window.addEventListener('resize',()=>{ if(!renderer3D||!camera) return; renderer3D.setSize(window.innerWidth,window.innerHeight); camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); });
+        }catch(err){ logSafe('Renderer init failed, fallback 2D', err); state.useThree=false; setup2D(); }
+      }
+
+      function rebuildPlayerMeshes(){
+        if(!state.useThree || !scene || !window.THREE) return;
+        meshes.forEach(m=>scene.remove(m));
+        meshes=game.players.map(p=>{ const mat=new THREE.MeshStandardMaterial({color:p.role==='imp'?0xff9f1c:0x46e8b3}); const g=new THREE.CapsuleGeometry(0.5,1.2,4,8); const m=new THREE.Mesh(g,mat); scene.add(m); return m; });
       }
 
       function startLoop3D(){
@@ -572,8 +579,8 @@
         function loop(){ if(state.paused) { requestAnimationFrame(loop); return; }
           const now=performance.now(); const dt=Math.min(0.05,(now-last)/1000); last=now;
           update(dt);
-          for(let i=0;i<game.players.length;i++){ const p=game.players[i]; const m=meshes[i]; m.position.set(p.x,0.75,p.z); }
-          renderer3D.render(scene,camera);
+          for(let i=0;i<game.players.length;i++){ const p=game.players[i]; const m=meshes[i]; if(m) m.position.set(p.x,0.75,p.z); }
+          if(renderer3D && scene && camera) renderer3D.render(scene,camera);
           requestAnimationFrame(loop);
         }
         requestAnimationFrame(loop);
