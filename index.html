@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StarCrew 3D (Single File)</title>
+  <style>
+    :root { --bg:#0a0f1a; --panel:#11182a; --accent:#46e8b3; --danger:#ff5c8d; --text:#e7f1ff; }
+    * { box-sizing:border-box; font-family:'Segoe UI',Roboto,Arial,sans-serif; }
+    body { margin:0; background:var(--bg); color:var(--text); overflow:hidden; }
+    #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at 50% 40%, #18233a, #0a0f1a); z-index:50; font-size:28px; letter-spacing:2px; }
+    #menu, #hud, #meeting, #final, #task-ui, #options-panel, #pause, #lobby { position:fixed; inset:0; pointer-events:none; }
+    #menu .panel, #options-panel .panel, #lobby .panel, #pause .panel { pointer-events:auto; width:420px; margin:80px auto; padding:24px; background:var(--panel); border:1px solid #1f2a3f; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,0.45); }
+    h1,h2,h3 { margin:0 0 12px 0; }
+    button { background:var(--accent); border:none; color:#0a0f1a; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:700; margin:6px 4px; box-shadow:0 4px 18px rgba(70,232,179,0.35); }
+    button.secondary { background:#1e2a44; color:var(--text); box-shadow:none; border:1px solid #22314f; }
+    button.danger { background:var(--danger); color:white; box-shadow:0 4px 18px rgba(255,92,141,0.4); }
+    label { display:block; margin:10px 0 6px; font-size:14px; color:#c7d4f5; }
+    input[type=range], select { width:100%; }
+    #hud { pointer-events:none; }
+    #hud .bar { position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.4); padding:10px; border-radius:10px; }
+    #hud .tasks { position:absolute; top:10px; right:10px; width:240px; background:rgba(0,0,0,0.55); padding:12px; border-radius:10px; font-size:13px; line-height:1.45; }
+    #hud .minimap { position:absolute; bottom:10px; left:10px; width:180px; height:180px; background:#0d1422; border:1px solid #1f2a3f; border-radius:10px; }
+    #action-btn { position:absolute; bottom:18px; right:18px; padding:14px 18px; font-size:16px; pointer-events:auto; }
+    #hud .cooldowns { position:absolute; bottom:10px; right:10px; text-align:right; font-size:13px; }
+    #meeting, #final, #task-ui, #pause { background:rgba(4,8,16,0.82); display:flex; align-items:center; justify-content:center; }
+    #meeting .panel, #final .panel, #task-ui .panel, #pause .panel { background:var(--panel); width:90%; max-width:820px; padding:18px; border-radius:12px; pointer-events:auto; }
+    #meeting .vote-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
+    #task-ui .panel { max-width:520px; text-align:center; }
+    #task-ui canvas, #task-ui .mini { margin:10px auto; background:#0e172a; border:1px solid #22314f; border-radius:10px; }
+    #fps { position:fixed; left:10px; bottom:200px; background:rgba(0,0,0,0.4); padding:6px 8px; border-radius:8px; font-size:12px; }
+    #toast { position:fixed; top:18px; left:50%; transform:translateX(-50%); background:#1e2a44; padding:10px 16px; border-radius:10px; opacity:0; transition:opacity .3s; }
+    #credits { font-size:13px; color:#9eb8f7; }
+    #canvas2d { position:fixed; inset:0; display:none; }
+    .hidden { display:none !important; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .pill { padding:6px 10px; background:#1b243b; border-radius:20px; margin:2px 0; display:inline-block; }
+  </style>
+</head>
+<body>
+  <div id="loading">Loading…</div>
+  <canvas id="canvas3d"></canvas>
+  <canvas id="canvas2d"></canvas>
+  <div id="menu" class="hidden">
+    <div class="panel">
+      <h1>StarCrew</h1>
+      <p>Versión single-file inspirada en juegos de deducción espacial.</p>
+      <button id="play-btn">Jugar</button>
+      <button id="options-btn" class="secondary">Opciones</button>
+      <button id="credits-btn" class="secondary">Créditos</button>
+      <div id="credits" class="hidden">Desarrollado para navegador, sin assets con copyright. Usa Three.js (con fallback 2D).</div>
+    </div>
+  </div>
+  <div id="options-panel" class="hidden">
+    <div class="panel">
+      <h2>Opciones</h2>
+      <label>Calidad</label>
+      <select id="quality">
+        <option value="high">Alta</option>
+        <option value="low">Baja</option>
+      </select>
+      <label>Volumen</label>
+      <input type="range" id="volume" min="0" max="1" step="0.05" value="0.5" />
+      <button id="options-back" class="secondary">Volver</button>
+    </div>
+  </div>
+  <div id="lobby" class="hidden">
+    <div class="panel">
+      <h2>Lobby offline</h2>
+      <label>Número de bots</label>
+      <input type="range" id="bot-count" min="5" max="9" value="7" />
+      <div class="row"><span class="pill" id="bot-count-label">7 bots</span></div>
+      <label>Impostores</label>
+      <select id="impostor-count"><option>1</option><option>2</option></select>
+      <label>Tareas por jugador</label>
+      <input type="range" id="tasks-per" min="6" max="10" value="6" />
+      <div class="row"><span class="pill" id="tasks-per-label">6 tareas</span></div>
+      <label>Cooldown de kill (s)</label>
+      <input type="range" id="kill-cd" min="8" max="25" value="12" />
+      <div class="row"><span class="pill" id="kill-cd-label">12s</span></div>
+      <label>Rol del jugador</label>
+      <select id="player-role"><option value="auto">Aleatorio</option><option value="crew">Tripulante</option><option value="imp">Impostor</option></select>
+      <button id="start-btn">Iniciar partida</button>
+      <button id="lobby-back" class="secondary">Atrás</button>
+    </div>
+  </div>
+  <div id="hud" class="hidden">
+    <div class="bar" id="status">Tripulante</div>
+    <div class="tasks"><strong>Tareas</strong><div id="task-list"></div><div id="sabotage-status"></div></div>
+    <div class="minimap"><canvas id="minimap-canvas" width="180" height="180"></canvas></div>
+    <div class="cooldowns" id="cooldowns"></div>
+    <button id="action-btn" class="secondary">E / Acción</button>
+  </div>
+  <div id="meeting" class="hidden">
+    <div class="panel">
+      <h2>Reunión</h2>
+      <div id="meeting-info"></div>
+      <div class="vote-grid" id="vote-grid"></div>
+      <button id="skip-vote" class="secondary">Omitir</button>
+    </div>
+  </div>
+  <div id="task-ui" class="hidden">
+    <div class="panel" id="task-panel"></div>
+  </div>
+  <div id="final" class="hidden">
+    <div class="panel">
+      <h2 id="final-title"></h2>
+      <div id="final-summary"></div>
+      <button id="final-menu">Volver al menú</button>
+    </div>
+  </div>
+  <div id="pause" class="hidden"><div class="panel"><h2>Pausa</h2><p>Esc para reanudar.</p><button id="resume">Reanudar</button><button id="leave" class="secondary">Salir</button></div></div>
+  <div id="fps" class="hidden"></div>
+  <div id="toast"></div>
+  <script>
+    (() => {
+      const logSafe = (...args)=>{ if(console && console.log) console.log('[StarCrew]',...args); };
+      const state = { mode:'loading', fallback2d:false, quality:'high', volume:0.5, useThree:false, paused:false };
+      const dom = {};
+      const resources = {
+        async loadScriptWithRetry(urls, timeout=2500, retries=1){
+          let lastErr=null;
+          for(const url of urls){
+            for(let i=0;i<=retries;i++){
+              try{ if(window.THREE) return url; await this._inject(url, timeout); logSafe('Loaded', url); return url; }
+              catch(e){ lastErr=e; logSafe('Load fail', url, e); }
+            }
+          }
+          throw lastErr||new Error('scripts failed');
+        },
+        _inject(url, timeout){
+          return new Promise((resolve,reject)=>{
+            const s=document.createElement('script');
+            let done=false; const timer=setTimeout(()=>{ if(done) return; done=true; s.remove(); reject('timeout'); }, timeout);
+            s.src=url; s.async=true; s.onload=()=>{ if(done) return; done=true; clearTimeout(timer); resolve(); };
+            s.onerror=()=>{ if(done) return; done=true; clearTimeout(timer); reject('error'); };
+            document.head.appendChild(s);
+          });
+        }
+      };
+      const $ = id=>document.getElementById(id);
+      ['loading','menu','options-panel','lobby','hud','meeting','task-ui','final','pause','fps','canvas3d','canvas2d','minimap-canvas','toast','action-btn','task-panel','meeting-info','vote-grid','skip-vote','final-title','final-summary','final-menu','play-btn','options-btn','credits-btn','credits','options-back','quality','volume','bot-count','impostor-count','tasks-per','kill-cd','player-role','start-btn','lobby-back','status','task-list','sabotage-status','cooldowns','fps','resume','leave','canvas3d','canvas2d','bot-count-label','tasks-per-label','kill-cd-label'].forEach(id=>dom[id.replace(/-/g,'_')]=$(id));
+
+      function show(el, yes=true){ el.classList[yes?'remove':'add']('hidden'); }
+      function toast(msg){ const t=dom.toast; t.textContent=msg; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,1800); }
+
+      async function boot(){
+        logSafe('boot');
+        attachUI();
+        await initRenderer();
+        dom.loading.style.display='none';
+        show(dom.menu);
+        state.mode='menu';
+      }
+
+      function attachUI(){
+        dom.play_btn.onclick=()=>{ show(dom.menu,false); show(dom.lobby,true); state.mode='lobby'; };
+        dom.options_btn.onclick=()=>{ show(dom.options_panel,true); show(dom.menu,false); };
+        dom.options_back.onclick=()=>{ show(dom.options_panel,false); show(dom.menu,true); };
+        dom.credits_btn.onclick=()=>{ dom.credits.classList.toggle('hidden'); };
+        dom.quality.onchange=e=>state.quality=e.target.value;
+        dom.volume.oninput=e=>state.volume=parseFloat(e.target.value);
+        dom.bot_count.oninput=e=>{ if(dom.bot_count_label) dom.bot_count_label.textContent=`${e.target.value} bots`; };
+        dom.tasks_per.oninput=e=>{ if(dom.tasks_per_label) dom.tasks_per_label.textContent=`${e.target.value} tareas`; };
+        dom.kill_cd.oninput=e=>{ if(dom.kill_cd_label) dom.kill_cd_label.textContent=`${e.target.value}s`; };
+        dom.lobby_back.onclick=()=>{ show(dom.lobby,false); show(dom.menu,true); };
+        dom.start_btn.onclick=startGame;
+        dom.skip_vote.onclick=()=>submitVote('skip');
+        dom.final_menu.onclick=()=>{ location.reload(); };
+        dom.resume.onclick=()=>togglePause(false);
+        dom.leave.onclick=()=>location.reload();
+        window.addEventListener('keydown',onKey);
+        document.addEventListener('visibilitychange',()=>{ if(document.hidden) togglePause(true); });
+      }
+
+      async function initRenderer(){
+        try{
+          await resources.loadScriptWithRetry([
+            'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+          ],2500,1);
+          if(window.THREE){
+            state.useThree=true; setup3D(); return;
+          }
+        }catch(err){ logSafe('3D failed, fallback to 2D', err); }
+        state.fallback2d=true; setup2D();
+      }
+
+      // ---- Game core state ----
+      const game = {
+        players:[], tasks:[], bodies:[], vents:[], sabotage:null, timer:0, killCooldown:12, mapRooms:[], ventsLink:[], phase:'none',
+      };
+      let controls={};
+
+      function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+      function uid(){ return Math.random().toString(36).slice(2,7); }
+
+      function createMap(){
+        const rooms=[
+          {name:'Puente',x:0,z:0,w:12,h:10},
+          {name:'Motores',x:-18,z:-4,w:12,h:12},
+          {name:'Laboratorio',x:18,z:-4,w:12,h:12},
+          {name:'Oxígeno',x:0,z:16,w:10,h:10},
+          {name:'Seguridad',x:-18,z:16,w:10,h:10},
+          {name:'Camaras',x:18,z:16,w:10,h:10},
+          {name:'Armería',x:0,z:-18,w:10,h:10},
+          {name:'Cafetería',x:18,z:-18,w:10,h:10}
+        ];
+        game.mapRooms=rooms;
+        game.corridors=[{x:0,z:0,w:60,h:6},{x:0,z:12,w:60,h:6},{x:0,z:-12,w:60,h:6},{x:-12,z:0,w:6,h:40},{x:12,z:0,w:6,h:40}];
+        game.vents=[{x:-18,z:-4},{x:0,z:16},{x:18,z:-4},{x:18,z:16}];
+      }
+
+      function randomRole(index, impostorCount){
+        return index < impostorCount ? 'imp' : 'crew';
+      }
+
+      function createPlayers(){
+        game.players=[]; game.bodies=[]; game.tasks=[];
+        const botN=parseInt(dom.bot_count.value,10);
+        const impostors=parseInt(dom.impostor_count.value,10);
+        const total=botN+1;
+        const order=[...Array(total).keys()].sort(()=>Math.random()-0.5);
+        const desiredRole=dom.player_role.value;
+        for(let i=0;i<total;i++){
+          const isPlayer=i===0;
+          let role=randomRole(order[i], impostors);
+          if(isPlayer && desiredRole!=='auto') role=desiredRole;
+          const p={id:uid(),name:isPlayer?'Tú':`Bot-${i}`,role,alive:true,taskProgress:[], x:0,z:0, rot:0, target:null, cooldown:0, sabotageCd:0, vote:null, suspicion:Math.random()*0.4, vision:role==='imp'?8:7, viewDir:{dx:0,dz:-1}};
+          p.taskProgress = generateTasks(parseInt(dom.tasks_per.value,10));
+          p.x = (Math.random()-0.5)*6; p.z=(Math.random()-0.5)*6;
+          game.players.push(p);
+        }
+        const impostorReal=game.players.filter(p=>p.role==='imp');
+        if(impostorReal.length===0) game.players[0].role='imp';
+        game.killCooldown=parseInt(dom.kill_cd.value,10);
+      }
+
+      function generateTasks(count){
+        const pool=['Estabilizar energía','Rutas de cables','Calibrar escáner','Descargar datos','Alinear antena','Despejar filtros','Reconectar oxígeno','Reiniciar reactor','Calibrar torreta','Reiniciar navegación'];
+        const res=[];
+        for(let i=0;i<count;i++){
+          const room=rand(game.mapRooms);
+          res.push({name:pool[i%pool.length]+` ${i+1}`,done:false,type:pool[i%6],target:{x:room.x+(Math.random()-0.5)*room.w*0.4,z:room.z+(Math.random()-0.5)*room.h*0.4}});
+        }
+        return res;
+      }
+
+      function startGame(){
+        createMap();
+        createPlayers();
+        rebuildPlayerMeshes();
+        game.phase='play'; game.sabotage=null; game.timer=0;
+        game.meeting=null;
+        show(dom.lobby,false); show(dom.menu,false); show(dom.hud,true);
+        show(dom.meeting,false);
+        dom.status.textContent='En partida';
+        state.mode='play';
+        state.paused=false;
+        updateTaskUI(); updateActionButton('Nada cercano');
+        if(state.useThree && renderer3D) startLoop3D(); else startLoop2D();
+        toast('Partida iniciada');
+      }
+
+      // ---- Controls ----
+      function onKey(e){
+        if(state.mode==='menu') return;
+        if(e.code==='Escape'){ togglePause(!state.paused); return; }
+        if(state.paused) return;
+        if(e.type==='keydown'){ controls[e.code]=true; } else { controls[e.code]=false; }
+      }
+      window.addEventListener('keyup', onKey);
+
+      function togglePause(v){ state.paused=v; show(dom.pause,v); }
+
+      // ---- Gameplay mechanics ----
+      function update(dt){
+        if(game.phase!=='play') return;
+        game.timer+=dt;
+        const player=game.players[0];
+        if(!player.alive) { } // ghost still can move slightly
+        handleMovement(player,dt,true);
+        for(let i=1;i<game.players.length;i++) handleBot(game.players[i],dt);
+        for(const p of game.players) p.cooldown=Math.max(0,p.cooldown-dt);
+        if(game.sabotage){ game.sabotage.time-=dt; if(game.sabotage.time<=0){ endGame('imp','El sabotaje no fue resuelto'); } }
+        updateHUD();
+      }
+
+      function handleMovement(p,dt,isPlayer=false){
+        const speed = (controls['ShiftLeft']||controls['ShiftRight'])? (isPlayer?5:3.5): (isPlayer?3.2:2.6);
+        let dx=0,dz=0;
+        if(isPlayer){
+          if(controls['KeyW']) dz-=1; if(controls['KeyS']) dz+=1; if(controls['KeyA']) dx-=1; if(controls['KeyD']) dx+=1;
+        } else {
+          if(!p.target || Math.random()<0.01) p.target=randomPoint();
+          const angle=Math.atan2(p.target.z-p.z,p.target.x-p.x); dx=Math.cos(angle); dz=Math.sin(angle);
+        }
+        const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
+        if(isPlayer && (Math.abs(dx)>0.01 || Math.abs(dz)>0.01)) p.viewDir={dx,dz};
+        const nx=p.x+dx*speed*dt; const nz=p.z+dz*speed*dt;
+        if(!collides(nx,nz)) { p.x=nx; p.z=nz; }
+      }
+
+      function randomPoint(){ const r=rand(game.mapRooms); return {x:r.x+(Math.random()-0.5)*r.w*0.6, z:r.z+(Math.random()-0.5)*r.h*0.6}; }
+
+      function collides(x,z){
+        const insideRect=(r)=>Math.abs(x - r.x) <= r.w/2 && Math.abs(z - r.z) <= r.h/2;
+        for(const r of game.mapRooms){
+          if(insideRect(r)) return false;
+        }
+        for(const c of (game.corridors||[])){ if(insideRect(c)) return false; }
+        return true;
+      }
+
+      function handleBot(bot,dt){
+        if(!bot.alive) return;
+        // basic suspicion random walk and actions
+        if(bot.role==='crew'){
+          const task=bot.taskProgress.find(t=>!t.done);
+          if(task && Math.random()<0.02){ bot.target=task.target||randomPoint(); task.target=bot.target; }
+          if(task && near(bot, task.target, 1.5)) { task.done=true; checkTasks(); toast(`${bot.name} completó tarea`); }
+        } else {
+          // impostor bot behaviour
+          bot.sabotageCd=Math.max(0,bot.sabotageCd-dt);
+          if(!game.sabotage && bot.sabotageCd<=0 && Math.random()<0.01){ triggerSabotage(rand(['luces','oxigeno'])); bot.sabotageCd=20+Math.random()*15; }
+          const victim=game.players.find(p=>p.alive && p.role==='crew' && distance(bot,p)<2.2 && bot.cooldown<=0 && !game.meeting);
+          if(victim){ killPlayer(bot,victim); bot.cooldown=game.killCooldown; }
+          // vents use
+          if(Math.random()<0.002){ const v=rand(game.vents); bot.x=v.x; bot.z=v.z; }
+        }
+        // report bodies
+        const body=game.bodies.find(b=>distance(bot,b)<2);
+        if(body && Math.random()<0.03){ startMeeting(bot, body); }
+        handleMovement(bot,dt,false);
+      }
+
+      function distance(a,b){ return Math.hypot(a.x-b.x,a.z-b.z); }
+      function near(p,pos,th=1){ return Math.abs(p.x-pos.x)<th && Math.abs(p.z-pos.z)<th; }
+
+      function interact(){
+        const player=game.players[0];
+        if(game.phase!=='play' || state.paused) return;
+        if(!player.alive){ toast('Eres fantasma'); return; }
+        const body=game.bodies.find(b=>distance(player,b)<2);
+        if(body){ startMeeting(player, body); return; }
+        const task = player.taskProgress.find(t=>!t.done && (!t.target || near(player,t.target,1.5)));
+        if(task){ openTask(task); return; }
+        if(player.role==='imp'){
+          const vent=game.vents.find(v=>distance(player,v)<1.5);
+          if(vent){ const other=rand(game.vents); player.x=other.x; player.z=other.z; toast('Usaste ventilación'); return; }
+        }
+        if(game.sabotage){
+          if(game.sabotage.type==='oxigeno' && near(player, game.sabotage.p1,1.5)) fixSabotage(player,'p1');
+          if(game.sabotage.type==='oxigeno' && near(player, game.sabotage.p2,1.5)) fixSabotage(player,'p2');
+          if(game.sabotage.type==='luces' && near(player, game.sabotage.p1,1.5)) fixSabotage(player,'p1');
+        }
+      }
+
+      function report(){
+        if(game.phase!=='play') return;
+        const player=game.players[0];
+        const body=game.bodies.find(b=>distance(player,b)<2);
+        if(body) startMeeting(player, body);
+      }
+
+      function kill(){
+        const player=game.players[0];
+        if(player.role!=='imp' || !player.alive || game.phase!=='play') return;
+        if(player.cooldown>0){ toast('Cooldown'); return; }
+        const victim=game.players.find(p=>p.alive && p!==player && distance(player,p)<2.3);
+        if(victim){ killPlayer(player,victim); player.cooldown=game.killCooldown; }
+      }
+
+      function killPlayer(killer,victim){ victim.alive=false; game.bodies.push({x:victim.x,z:victim.z, name:victim.name}); toast(`${victim.name} fue eliminado`); checkEnd(); }
+
+      function startMeeting(caller, body){ game.phase='meeting'; game.meeting={caller,body,time:30}; show(dom.hud,false); show(dom.meeting,true); populateVotes(); }
+
+      function populateVotes(){
+        dom.meeting_info.textContent='Discusión y voto'; dom.vote_grid.innerHTML='';
+        for(const p of game.players){
+          const btn=document.createElement('button'); btn.textContent=p.name+(p.alive?'':' (x)'); btn.disabled=!p.alive;
+          btn.onclick=()=>submitVote(p.id);
+          dom.vote_grid.appendChild(btn);
+        }
+      }
+
+      function submitVote(targetId){
+        const player=game.players[0];
+        game.players.forEach(p=>p.vote=null);
+        player.vote=targetId;
+        for(const bot of game.players.slice(1)){
+          if(!bot.alive) continue; bot.vote=botLogicVote(bot); }
+        resolveVotes();
+      }
+
+      function botLogicVote(bot){
+        const alive=game.players.filter(p=>p.alive);
+        if(game.bodies.length===0) return 'skip';
+        const suspect=alive.find(p=>p.role==='imp')||rand(alive).id;
+        return Math.random()<0.6?suspect:'skip';
+      }
+
+      function resolveVotes(){
+        const tally={};
+        for(const p of game.players){ if(p.vote){ tally[p.vote]=(tally[p.vote]||0)+1; } }
+        const entries=Object.entries(tally).sort((a,b)=>b[1]-a[1]);
+        let expelled=null;
+        if(entries.length>0 && !(entries.length>1 && entries[0][1]===entries[1][1])){
+          expelled=game.players.find(p=>p.id===entries[0][0]);
+        }
+        if(expelled){ expelled.alive=false; toast(`${expelled.name} fue expulsado`); }
+        game.phase='play'; show(dom.meeting,false); show(dom.hud,true);
+        checkEnd();
+      }
+
+      function checkEnd(){
+        const crewAlive=game.players.filter(p=>p.alive && p.role==='crew').length;
+        const impAlive=game.players.filter(p=>p.alive && p.role==='imp').length;
+        const tasksDone = game.players.every(p=>p.taskProgress.every(t=>t.done || p.role==='imp'));
+        if(impAlive===0) endGame('crew','Todos los impostores fueron expulsados');
+        else if(crewAlive===0 || impAlive>=crewAlive) endGame('imp','Impostores tomaron el control');
+        else if(tasksDone) endGame('crew','Barra de tareas completada');
+      }
+
+      function endGame(winner, reason){
+        game.phase='end'; show(dom.hud,false); show(dom.meeting,false); show(dom.task_ui,false); show(dom.final,true);
+        dom.final_title.textContent = winner==='crew'? 'Victoria Tripulación':'Victoria Impostores';
+        dom.final_summary.textContent = reason;
+      }
+
+      function openTask(task){
+        show(dom.task_ui,true);
+        dom.task_panel.innerHTML='';
+        const info=document.createElement('div'); info.textContent=task.name; dom.task_panel.appendChild(info);
+        const mini=document.createElement('canvas'); mini.width=320; mini.height=200; mini.className='mini'; dom.task_panel.appendChild(mini);
+        const ctx=mini.getContext('2d');
+        if(task.type.includes('cables')) wiresTask(ctx,mini,task);
+        else if(task.type.includes('energ')) sliderTask(ctx,mini,task);
+        else if(task.type.includes('escáner')) memoryTask(ctx,mini,task);
+        else if(task.type.includes('datos')) downloadTask(ctx,mini,task);
+        else if(task.type.includes('antena')) rotateTask(ctx,mini,task);
+        else asteroidsTask(ctx,mini,task);
+      }
+
+      function completeTask(task){ task.done=true; show(dom.task_ui,false); toast('Tarea completada'); checkTasks(); }
+      function checkTasks(){
+        const total=game.players.reduce((a,p)=>a+p.taskProgress.length,0);
+        const done=game.players.reduce((a,p)=>a+p.taskProgress.filter(t=>t.done || p.role==='imp').length,0);
+        dom.status.textContent=`Progreso tareas ${(100*done/total).toFixed(0)}%`;
+        if(done>=total) checkEnd();
+      }
+
+      // ---- Minigames ----
+      function sliderTask(ctx,cv,task){
+        let val=0; ctx.fillStyle='#0e182a'; ctx.fillRect(0,0,cv.width,cv.height);
+        const target=0.8; ctx.fillStyle='#222'; ctx.fillRect(40,90,240,20);
+        const handle=()=>{ ctx.clearRect(0,0,cv.width,cv.height); ctx.fillStyle='#0e182a'; ctx.fillRect(0,0,cv.width,cv.height);
+          ctx.fillStyle='#222'; ctx.fillRect(40,90,240,20); ctx.fillStyle='#46e8b3'; ctx.fillRect(40,90,val*240,20);
+          ctx.fillStyle='#fff'; ctx.fillRect(40+target*240-4,80,8,40); };
+        handle();
+        cv.onmousemove=e=>{ const r=cv.getBoundingClientRect(); val=Math.min(1,Math.max(0,(e.clientX-r.left-40)/240)); handle(); };
+        cv.onclick=()=>{ if(Math.abs(val-target)<0.08) { completeTask(task); cv.onmousemove=null; cv.onclick=null; } else toast('Ajusta mejor'); };
+      }
+
+      function wiresTask(ctx,cv,task){
+        const points=[{x:40,y:40},{x:40,y:100},{x:40,y:160}];
+        const targets=[{x:280,y:40},{x:280,y:100},{x:280,y:160}];
+        const used=new Set(); let selected=null; draw();
+        function draw(){ ctx.fillStyle='#0b1528'; ctx.fillRect(0,0,cv.width,cv.height);
+          ctx.strokeStyle='#555'; ctx.lineWidth=8; for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(points[i].x,points[i].y); ctx.lineTo(targets[i].x,targets[i].y); ctx.stroke(); }
+          ctx.fillStyle='#46e8b3'; points.forEach((p,i)=>{ ctx.beginPath(); ctx.arc(p.x,p.y,12,0,Math.PI*2); ctx.fill(); ctx.fillText(i+1,p.x-4,p.y+4); });
+          ctx.fillStyle='#ff8aa0'; targets.forEach((p,i)=>{ ctx.beginPath(); ctx.arc(p.x,p.y,12,0,Math.PI*2); ctx.fill(); ctx.fillText(i+1,p.x-4,p.y+4); });
+          if(selected){ ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(selected.x,selected.y,15,0,Math.PI*2); ctx.stroke(); }
+        }
+        cv.onclick=e=>{
+          const r=cv.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
+          const idx=points.findIndex(p=>Math.hypot(p.x-x,p.y-y)<14);
+          const tgt=targets.findIndex(p=>Math.hypot(p.x-x,p.y-y)<14);
+          if(idx>=0) { selected=points[idx]; }
+          else if(tgt>=0 && selected){ if(tgt==points.indexOf(selected) && !used.has(tgt)){ used.add(tgt); draw(); if(used.size===3){ completeTask(task); cv.onclick=null; } else toast('Cable conectado'); } }
+          draw();
+        };
+      }
+
+      function memoryTask(ctx,cv,task){
+        const seq=[1,2,3].sort(()=>Math.random()-0.5);
+        let step=0; draw();
+        function draw(){ ctx.fillStyle='#0f1a2d'; ctx.fillRect(0,0,cv.width,cv.height);
+          ctx.fillStyle='#fff'; ctx.font='16px sans'; ctx.fillText('Repite: '+seq.join('-'),20,30);
+          for(let i=0;i<3;i++){ ctx.fillStyle= step===i? '#46e8b3':'#1f2a3f'; ctx.fillRect(60+i*80,80,60,60); ctx.fillStyle='#fff'; ctx.fillText(i+1,85+i*80,115); }
+        }
+        cv.onclick=e=>{ const r=cv.getBoundingClientRect(); const x=e.clientX-r.left; const i=Math.floor((x-60)/80); if(i>=0&&i<3){ if(seq[step]===i+1){ step++; if(step===seq.length){ completeTask(task); cv.onclick=null; } } else { step=0; toast('Secuencia reiniciada'); } draw(); } };
+      }
+
+      function downloadTask(ctx,cv,task){
+        let progress=0; draw();
+        function draw(){ ctx.fillStyle='#0d1626'; ctx.fillRect(0,0,cv.width,cv.height);
+          ctx.fillStyle='#222'; ctx.fillRect(40,90,240,22);
+          ctx.fillStyle='#46e8b3'; ctx.fillRect(40,90,progress*240,22);
+          ctx.fillStyle='#fff'; ctx.fillText(`Transferencia ${(progress*100).toFixed(0)}%`,80,80);
+        }
+        const interval=setInterval(()=>{ progress=Math.min(1,progress+0.1+Math.random()*0.05); draw(); if(progress>=1){ clearInterval(interval); completeTask(task); } },300);
+      }
+
+      function rotateTask(ctx,cv,task){
+        let angle=0; draw();
+        function draw(){ ctx.fillStyle='#0d1528'; ctx.fillRect(0,0,cv.width,cv.height); ctx.save(); ctx.translate(cv.width/2,cv.height/2); ctx.rotate(angle); ctx.strokeStyle='#46e8b3'; ctx.beginPath(); ctx.arc(0,0,50,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
+        cv.onmousemove=e=>{ const r=cv.getBoundingClientRect(); const dx=e.clientX-(r.left+cv.width/2); angle=Math.atan2(e.clientY-(r.top+cv.height/2),dx); draw(); };
+        cv.onclick=()=>{ if(Math.abs(angle)<0.3){ completeTask(task); cv.onclick=null; cv.onmousemove=null; } else toast('Alinea la antena'); };
+      }
+
+      function asteroidsTask(ctx,cv,task){
+        let hits=0; const targets=[...Array(6)].map(()=>({x:Math.random()*cv.width,y:Math.random()*cv.height,r:10+Math.random()*10}));
+        draw();
+        function draw(){ ctx.fillStyle='#0c1524'; ctx.fillRect(0,0,cv.width,cv.height); ctx.fillStyle='#46e8b3'; targets.forEach(t=>{ ctx.beginPath(); ctx.arc(t.x,t.y,t.r,0,Math.PI*2); ctx.fill(); }); ctx.fillStyle='#fff'; ctx.fillText(`Pulsa asteroides (${hits}/6)`,20,20); }
+        cv.onclick=e=>{ const r=cv.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top; const idx=targets.findIndex(t=>Math.hypot(t.x-x,t.y-y)<t.r); if(idx>=0){ targets.splice(idx,1); hits++; draw(); if(hits>=6){ completeTask(task); cv.onclick=null; } } };
+      }
+
+      // ---- Sabotage ----
+      function triggerSabotage(type){
+        if(game.sabotage) return;
+        if(type==='oxigeno'){ game.sabotage={type:'oxigeno', time:45, p1:{x:-18,z:-4}, p2:{x:18,z:-4}, fixed1:false, fixed2:false}; }
+        else { game.sabotage={type:'luces', time:60, p1:{x:0,z:16}, fixed1:false}; }
+        dom.sabotage_status.textContent=`Sabotaje ${type}`;
+      }
+      function fixSabotage(p,which){ if(!game.sabotage) return; if(game.sabotage.type==='oxigeno'){ game.sabotage[which.replace('p','fixed')] = true; toast('Panel resuelto'); if(game.sabotage.fixed1 && game.sabotage.fixed2){ game.sabotage=null; dom.sabotage_status.textContent=''; } }
+        else if(game.sabotage.type==='luces'){ game.sabotage.fixed1=true; game.sabotage=null; dom.sabotage_status.textContent=''; toast('Luces restauradas'); }
+      }
+
+      // ---- HUD ----
+      function updateActionButton(text){ dom.action_btn.textContent=text; }
+      function updateTaskUI(){ /* placeholder to keep state consistent */ }
+      function updateHUD(){
+        const p=game.players[0];
+        dom.task_list.innerHTML=p.taskProgress.map(t=>`<div>${t.done?'✅':'▫️'} ${t.name}</div>`).join('');
+        dom.cooldowns.innerHTML=`Kill: ${(p.cooldown||0).toFixed(1)}s` + (game.sabotage?`<br>Sabotaje: ${(game.sabotage.time).toFixed(0)}s`:'');
+        drawMinimap();
+      }
+
+      function drawMinimap(){
+        const ctx=dom.minimap_canvas.getContext('2d'); ctx.clearRect(0,0,180,180); ctx.fillStyle='#0f1a22'; ctx.fillRect(0,0,180,180); ctx.strokeStyle='#22314f';
+        game.mapRooms.forEach(r=>{ const sx=r.x*3+90, sz=r.z*3+90; ctx.strokeRect(sx-r.w*1.5/2, sz-r.h*1.5/2, r.w*1.5, r.h*1.5); });
+        (game.corridors||[]).forEach(r=>{ const sx=r.x*3+90, sz=r.z*3+90; ctx.strokeRect(sx-r.w*1.5/2, sz-r.h*1.5/2, r.w*1.5, r.h*1.5); });
+        for(const b of game.bodies){ const sx=b.x*3+90, sz=b.z*3+90; ctx.fillStyle='#ff5c8d'; ctx.fillRect(sx-3,sz-3,6,6); }
+        for(const p of game.players){ if(!p.alive) continue; const sx=p.x*3+90, sz=p.z*3+90; ctx.fillStyle=p.role==='imp'?'#ff9f1c':'#46e8b3'; ctx.fillRect(sx-2,sz-2,4,4); }
+      }
+
+      // ---- Rendering ----
+      let renderer3D=null, scene=null, camera=null, meshes=[];
+      function setup3D(){
+        try{
+          state.useThree=true; dom.canvas3d.style.display='block'; dom.canvas2d.style.display='none';
+          const canvas=dom.canvas3d; renderer3D=new THREE.WebGLRenderer({canvas, antialias: state.quality==='high'});
+          renderer3D.setSize(window.innerWidth, window.innerHeight);
+          scene=new THREE.Scene(); scene.background=new THREE.Color('#0a0f1a');
+          camera=new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight,0.1,200);
+          camera.position.set(0,18,22); camera.lookAt(0,0,0);
+          const light=new THREE.DirectionalLight(0xffffff, 0.8); light.position.set(10,20,10); scene.add(light); scene.add(new THREE.AmbientLight(0x446688));
+          createMap();
+          const roomMat=new THREE.MeshPhongMaterial({color:0x1b2b45});
+          for(const r of game.mapRooms){ const g=new THREE.BoxGeometry(r.w,0.5,r.h); const m=new THREE.Mesh(g,roomMat); m.position.set(r.x,0,r.z); scene.add(m); }
+          for(const c of game.corridors){ const g=new THREE.BoxGeometry(c.w,0.2,c.h); const m=new THREE.Mesh(g, new THREE.MeshPhongMaterial({color:0x16233a})); m.position.set(c.x,0,c.z); scene.add(m); }
+          const wallMat=new THREE.MeshPhongMaterial({color:0x0f1726});
+          for(const r of game.mapRooms){
+            const w=new THREE.BoxGeometry(r.w+1,4,0.5); const d=new THREE.Mesh(w,wallMat); d.position.set(r.x,1.5,r.z-r.h/2); scene.add(d);
+            const d2=d.clone(); d2.position.set(r.x,1.5,r.z+r.h/2); scene.add(d2);
+            const g2=new THREE.BoxGeometry(0.5,4,r.h+1); const l=new THREE.Mesh(g2,wallMat); l.position.set(r.x-r.w/2,1.5,r.z); scene.add(l);
+            const l2=l.clone(); l2.position.set(r.x+r.w/2,1.5,r.z); scene.add(l2);
+          }
+          rebuildPlayerMeshes();
+          window.addEventListener('resize',()=>{ if(!renderer3D||!camera) return; renderer3D.setSize(window.innerWidth,window.innerHeight); camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); });
+        }catch(err){ logSafe('Renderer init failed, fallback 2D', err); state.useThree=false; setup2D(); }
+      }
+
+      function rebuildPlayerMeshes(){
+        if(!state.useThree || !scene || !window.THREE) return;
+        meshes.forEach(m=>scene.remove(m));
+        meshes=game.players.map(p=>{ const mat=new THREE.MeshStandardMaterial({color:p.role==='imp'?0xff9f1c:0x46e8b3}); const g=new THREE.CapsuleGeometry(0.5,1.2,4,8); const m=new THREE.Mesh(g,mat); scene.add(m); return m; });
+      }
+
+      function startLoop3D(){
+        let last=performance.now();
+        function loop(){ if(state.paused) { requestAnimationFrame(loop); return; }
+          const now=performance.now(); const dt=Math.min(0.05,(now-last)/1000); last=now;
+          update(dt);
+          for(let i=0;i<game.players.length;i++){ const p=game.players[i]; const m=meshes[i]; if(m) m.position.set(p.x,0.75,p.z); }
+          // first-person camera: follow player head
+          const player=game.players[0]; const dir=player.viewDir||{dx:0,dz:-1};
+          if(camera){ camera.position.set(player.x,1.7,player.z); camera.lookAt(player.x+dir.dx,1.6,player.z+dir.dz); }
+          if(renderer3D && scene && camera) renderer3D.render(scene,camera);
+          requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+      }
+
+      // ---- 2D fallback ----
+      let ctx2d=null;
+      function setup2D(){
+        dom.canvas2d.style.display='block'; dom.canvas3d.style.display='none';
+        dom.canvas2d.width=window.innerWidth; dom.canvas2d.height=window.innerHeight; ctx2d=dom.canvas2d.getContext('2d');
+        createMap();
+        window.addEventListener('resize',()=>{ dom.canvas2d.width=window.innerWidth; dom.canvas2d.height=window.innerHeight; });
+      }
+      function startLoop2D(){
+        let last=performance.now();
+        function loop(){ if(state.paused) { requestAnimationFrame(loop); return; }
+          const now=performance.now(); const dt=Math.min(0.05,(now-last)/1000); last=now; update(dt); draw2D(); requestAnimationFrame(loop); }
+        requestAnimationFrame(loop);
+      }
+      function draw2D(){
+        ctx2d.fillStyle='#0a0f1a'; ctx2d.fillRect(0,0,dom.canvas2d.width,dom.canvas2d.height);
+        const scale=20; const ox=dom.canvas2d.width/2; const oz=dom.canvas2d.height/2;
+        ctx2d.strokeStyle='#1f2a3f';
+        game.mapRooms.forEach(r=>{ ctx2d.strokeRect(ox+r.x*scale-r.w*scale/2, oz+r.z*scale-r.h*scale/2, r.w*scale, r.h*scale); });
+        (game.corridors||[]).forEach(r=>{ ctx2d.strokeRect(ox+r.x*scale-r.w*scale/2, oz+r.z*scale-r.h*scale/2, r.w*scale, r.h*scale); });
+        for(const b of game.bodies){ ctx2d.fillStyle='#ff5c8d'; ctx2d.beginPath(); ctx2d.arc(ox+b.x*scale, oz+b.z*scale,6,0,Math.PI*2); ctx2d.fill(); }
+        game.players.forEach(p=>{ if(!p.alive) return; ctx2d.fillStyle=p.role==='imp'?'#ff9f1c':'#46e8b3'; ctx2d.beginPath(); ctx2d.arc(ox+p.x*scale, oz+p.z*scale,5,0,Math.PI*2); ctx2d.fill(); });
+      }
+
+      // ---- inputs ----
+      dom.action_btn.onclick=interact;
+      document.addEventListener('keydown',e=>{ if(e.code==='KeyE') interact(); if(e.code==='KeyR') report(); if(e.code==='KeyQ') kill(); });
+
+      // Safe start
+      boot();
+    })();
+  </script>
+</body>
+</html>
