@@ -8,24 +8,24 @@ Aplicación de una sola página con catálogo, carrito y panel Admin para un col
    - `python -m http.server 4173 --directory app`
    - o abre `app/index.html` directamente en tu navegador.
 2. Visita `http://localhost:4173` en tu navegador.
-3. Usa el botón flotante o las secciones para navegar.
+3. Navega con las pestañas **Inicio**, **Productos** y **Admin**.
 
 ## Acceso al panel Admin
 
 - PIN por defecto: **1234**.
-- Desde la sección “Panel Admin” ingresa el PIN para desbloquear.
+- Solo el dueño debe ingresar al panel; los clientes usan Inicio/Productos.
 - Configura:
   - Datos generales (nombre del negocio, WhatsApp, dirección, mapa, horarios, mensaje del hero, tema y PIN).
   - CRUD de productos (precio, stock, etiquetas, disponibilidad, imagen, categoría).
   - Editor rápido de precios y stock.
   - Ofertas del día y combos con duración opcional y activación.
-  - Botón "Generar/Recargar catálogo automático" para cargar 100 productos de ejemplo.
+  - Botón "Recargar catálogo automático" para cargar 100 productos de ejemplo.
 
 ## Funcionalidades destacadas
 
 - Modo claro/oscuro y tipografía profesional (Inter) sin dependencias externas de JavaScript.
 - Catálogo con 80–150 productos precargados, imágenes, etiquetas, precio en RD$, stock y disponibilidad.
-- Filtros y ordenamiento por popularidad o precio, búsqueda en vivo y paginación para rendimiento.
+- Pestaña de productos con búsqueda, filtros, ordenamiento y paginación para rendimiento.
 - Ofertas del día y combos con temporizador.
 - Carrito con cantidades, nota y dirección; genera mensaje formateado listo para WhatsApp.
 - Persistencia en `localStorage` para configuración, catálogo, ofertas, combos y carrito.
