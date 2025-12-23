@@ -1,6 +1,6 @@
 # Colmado Digital SPA
 
-Aplicación de una sola página con catálogo, carrito y panel Admin para un colmado. No requiere instalación de dependencias: solo sirve los archivos estáticos desde la carpeta `app/`.
+Aplicación de una sola página con catálogo, carrito y panel Admin para un colmado. No requiere instalación de dependencias ni descarga de librerías externas: basta con servir los archivos estáticos desde `app/`.
 
 ## Cómo ejecutar
 
@@ -23,9 +23,9 @@ Aplicación de una sola página con catálogo, carrito y panel Admin para un col
 
 ## Funcionalidades destacadas
 
-- Modo claro/oscuro y tipografía profesional (Inter).
-- Catálogo virtualizado (react-window) con 80–150 productos precargados, imágenes, etiquetas, precio en RD$, stock y disponibilidad.
-- Filtros y ordenamiento por popularidad o precio, búsqueda en vivo.
+- Modo claro/oscuro y tipografía profesional (Inter) sin dependencias externas de JavaScript.
+- Catálogo con 80–150 productos precargados, imágenes, etiquetas, precio en RD$, stock y disponibilidad.
+- Filtros y ordenamiento por popularidad o precio, búsqueda en vivo y paginación para rendimiento.
 - Ofertas del día y combos con temporizador.
 - Carrito con cantidades, nota y dirección; genera mensaje formateado listo para WhatsApp.
 - Persistencia en `localStorage` para configuración, catálogo, ofertas, combos y carrito.
